@@ -18,17 +18,20 @@ final class HuishangClient: ModelClient {
     /// The conversation in the chat API's form: what the model sent goes back unchanged.
     private var messages: [[String: Any]] = []
 
-    static let base = URL(string: "https://opencode.ai/zen/go/v1")!
+    // The gateway's address, its user agent and its headers are read from ModelCatalog and
+    // ConnectionCheck as well: none of them touches the client's conversation, so they are not
+    // tied to the main actor.
+    nonisolated static let base = URL(string: "https://opencode.ai/zen/go/v1")!
 
     /// The client's name and build, as the gateway asks a client to identify itself: a coding agent's
     /// own user agent, not an SDK's or a browser's.
-    static var agent: String {
+    nonisolated static var agent: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         return "poki-agent/\(version) (iPhone; Poki)"
     }
 
     /// What every request carries: the key, that user agent, and the conversation's id.
-    static func headers(key: String, session: String) -> [String: String] {
+    nonisolated static func headers(key: String, session: String) -> [String: String] {
         ["authorization": "Bearer \(key)", "user-agent": agent, "x-opencode-session": session, "accept": "application/json"]
     }
 
