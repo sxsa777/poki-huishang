@@ -1,0 +1,73 @@
+// The Live Activity's configuration follows AgentLiveActivityWidget in Clarklevis1995/dsh-mobile
+// (commit ebe19764, AgentLiveActivityWidget/AgentLiveActivityWidget.swift), MIT License, Copyright (c)
+// 2026 Chaofan Li. See THIRD_PARTY_NOTICES.md.
+import ActivityKit
+import SwiftUI
+import WidgetKit
+
+@main
+struct PokiWidgetsBundle: WidgetBundle {
+    var body: some Widget {
+        PokiLiveActivity()
+        TalkToPokiControl()
+    }
+}
+
+/// Poki's Live Activity: what the agent is doing on the phone, or what it needs from you. The pairing
+/// code while pairing, the current setup step while setting up, and Allow/Deny for sensitive actions.
+/// The buttons are for the person; PokiCore sends no input while an approval waits, so the runner never
+/// taps them. A tap anywhere else opens the screen the state is about (`ActivityFace.link`), except on
+/// the expanded island while the agent may be acting, where it does nothing (`TapShield`).
+struct PokiLiveActivity: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: PokiActivityAttributes.self) { context in
+            let face = context.face
+            LockScreenCard(face: face).dynamicTypeSize(...ActivityMetrics.largestType)
+                .environment(\.colorScheme, .dark)
+                .environment(\.locale, AppLocalization.locale)
+                // Outside the line above, where the system's own appearance can still be read: the flat
+                // colour that goes with the card's gradient, and light or dark handed down to the card.
+                .modifier(CardTint())
+                .activitySystemActionForegroundColor(.white)
+                .widgetURL(face.link)
+        } dynamicIsland: { context in
+            let face = context.face
+            return DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) { IslandLeading(face: face).dynamicTypeSize(...ActivityMetrics.largestType).environment(\.locale, AppLocalization.locale).modifier(TapShield(on: face.shieldsTaps)) }
+                DynamicIslandExpandedRegion(.trailing) { IslandTrailing(face: face).dynamicTypeSize(...ActivityMetrics.largestType).environment(\.locale, AppLocalization.locale).modifier(TapShield(on: face.shieldsTaps)) }
+                DynamicIslandExpandedRegion(.bottom) { IslandBottom(face: face).dynamicTypeSize(...ActivityMetrics.largestType).environment(\.locale, AppLocalization.locale).modifier(TapShield(on: face.shieldsTaps)) }
+            } compactLeading: {
+                CompactLeading(face: face).dynamicTypeSize(...ActivityMetrics.largestType).environment(\.locale, AppLocalization.locale)
+            } compactTrailing: {
+                CompactTrailing(face: face).dynamicTypeSize(...ActivityMetrics.largestType).environment(\.locale, AppLocalization.locale)
+            } minimal: {
+                MinimalView(face: face).dynamicTypeSize(...ActivityMetrics.largestType).environment(\.locale, AppLocalization.locale)
+            }
+            .widgetURL(face.link)
+            // Always Poki's blue; the system draws the outline only over a dark background, at its own width.
+            .keylineTint(ActivityTheme.current.outline)
+            // No margins: the bear stands on the island's own edge, and the views keep their distances.
+            .contentMargins(.all, 0, for: .expanded)
+            .contentMargins(.all, 0, for: .compactLeading)
+            .contentMargins(.all, 0, for: .minimal)
+        }
+    }
+}
+
+extension ActivityViewContext<PokiActivityAttributes> {
+    /// The face to draw. An approval's stale date is its expiry: once it passes, the buttons go even if
+    /// the app has not had a chance to update yet, so nobody taps Allow on a dead request. Any other
+    /// state past its stale date says it is not updating.
+    var face: ActivityFace {
+        var state = self.state
+        if isStale, state.approval != nil, state.phase.holdsApproval {
+            state.approval = nil
+            state.decision = nil
+            state.phase = .working
+            state.headline = "Step skipped"
+            state.event = .init(kind: .expired, text: "Timed out")
+            return state.face(stale: false)
+        }
+        return state.face(stale: isStale)
+    }
+}
